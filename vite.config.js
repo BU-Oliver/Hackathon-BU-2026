@@ -1,12 +1,11 @@
 import { defineConfig } from "vite";
 
-// IMPORTANT:
-// Do not hardcode the H: drive as Vite's root. Bournemouth University's
-// mapped H: drive is virtualised, and Node/esbuild can resolve an absolute
-// H: path through the university's backing path. Let Vite use the directory
-// from which npm is launched instead.
+// Keep everything relative to the folder where the project is launched.
+// Do not hardcode the university H: drive: its virtual mapping can make
+// absolute Windows paths resolve incorrectly inside Vite/esbuild.
 export default defineConfig({
   root: ".",
+  base: "./",
   server: {
     host: "127.0.0.1",
     port: 5173,
@@ -14,8 +13,5 @@ export default defineConfig({
     fs: {
       strict: false
     }
-  },
-  optimizeDeps: {
-    entries: ["index.html"]
   }
 });
