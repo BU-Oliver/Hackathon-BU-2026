@@ -1,21 +1,21 @@
 import { defineConfig } from "vite";
-import { resolve } from "node:path";
 
-// Bournemouth University mapped H: drive project location.
-// This prevents Vite from resolving /src/main.js against the university
-// web/home directory when the project is launched from the wrong working directory.
-const PROJECT_ROOT = "H:\\Hackathon\\22-09-2026\\Hackathon-BU-2026";
-
+// IMPORTANT:
+// Do not hardcode the H: drive as Vite's root. Bournemouth University's
+// mapped H: drive is virtualised, and Node/esbuild can resolve an absolute
+// H: path through the university's backing path. Let Vite use the directory
+// from which npm is launched instead.
 export default defineConfig({
-  root: PROJECT_ROOT,
-  resolve: {
-    alias: {
-      "@": resolve(PROJECT_ROOT, "src")
+  root: ".",
+  server: {
+    host: "127.0.0.1",
+    port: 5173,
+    strictPort: false,
+    fs: {
+      strict: false
     }
   },
-  server: {
-    fs: {
-      allow: [PROJECT_ROOT]
-    }
+  optimizeDeps: {
+    entries: ["index.html"]
   }
 });
