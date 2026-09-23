@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Headline or Hype?</title>
+  </head>
+  <body>
+    <div id="game"></div>
+    <div id="hud">
+      <div class="brand">HEADLINE <span>OR</span> HYPE?</div>
+      <div class="hint">Walk to the terminal. A visitor will bring you a headline to investigate.</div>
+    </div>
+    <div id="terminal-ui" class="hidden">
+      <div class="terminal-window">
+        <div class="terminal-top"><span>●</span><span>●</span><span>●</span><strong>EVIDENCE TERMINAL // 01</strong></div>
+        <div id="headline" class="headline"></div>
+        <p class="question">What share of the facility's electricity is generated from renewable sources?</p>
+        <div class="slider-row">
+          <span>0%</span>
+          <input id="renewable-slider" type="range" min="0" max="100" value="50" step="1" />
+          <span>100%</span>
+        </div>
+        <div id="guess" class="guess">50%</div>
+        <button id="submit">CHECK EVIDENCE</button>
+        <div id="result" class="result"></div>
+        <button id="next" class="secondary hidden">NEXT HEADLINE</button>
+      </div>
+    </div>
+    <div id="crosshair">+</div>
+    <script type="module" src="/src/main.js"></script>
+  </body>
+</html>
