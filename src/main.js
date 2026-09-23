@@ -1,293 +1,278 @@
 import "./style.css";
+import { createWorld } from "./world.js";
+import { initCustomizer, DEFAULT_LOOK } from "./customizer.js";
+import { startDay, getTrust, puffBurst } from "./chat.js";
 
-/* ---------------------------------- data ---------------------------------- */
-
-const ROUNDS = [
+/* ------------------------------ question pool ----------------------------- */
+const POOL = [
   {
     question: "be honest… how much electricity running datacenters here is actually renewable?",
-    prefix: "The electricity running this datacenter is",
-    suffix: "renewable.",
-    trueValue: 68,
-    tolerance: 6,
-    vindicated: [
-      "ok ok… receipts checked. ✅ you actually know the grid mix.",
-      "fine. the wind farm telemetry backs you up.",
-    ],
-    liar: [
-      "LIAR. 🤨 the meter says {true}% — not {guess}%. who sent you, gas lobby?",
-      "LIAR!! I literally watch the turbines spin. it's {true}%, not {guess}%.",
-    ],
+    prefix: "The electricity running this datacenter is", suffix: "renewable.",
+    trueValue: 68, tolerance: 6,
+    vindicated: ["ok ok… receipts checked. ✅ you actually know the grid mix.", "fine. the wind farm telemetry backs you up."],
+    liar: ["LIAR. 🤨 the meter says {true}% — not {guess}%. who sent you, gas lobby?", "LIAR!! I literally watch the turbines spin. it's {true}%, not {guess}%."],
   },
   {
     question: "quick one — what % of site power gets wasted just on cooling?",
-    prefix: "Cooling wastes",
-    suffix: "of site power.",
-    trueValue: 32,
-    tolerance: 6,
+    prefix: "Cooling wastes", suffix: "of site power.",
+    trueValue: 32, tolerance: 6,
     vindicated: ["yep. chillers are thirsty beasts. ❄️", "correct — that's why the aisles feel like a fridge."],
-    liar: [
-      "LIAR. it's {true}% on cooling, not {guess}%. touch a hot aisle and try again.",
-      "LIAR!! the BMS logs say {true}%. stop cooling the truth.",
-    ],
+    liar: ["LIAR. it's {true}% on cooling, not {guess}%. touch a hot aisle and try again.", "LIAR!! the BMS logs say {true}%. stop cooling the truth."],
   },
   {
     question: "and water? what % of our cooling water is recycled?",
-    prefix: "We recycle",
-    suffix: "of cooling water.",
-    trueValue: 54,
-    tolerance: 7,
+    prefix: "We recycle", suffix: "of cooling water.",
+    trueValue: 54, tolerance: 7,
     vindicated: ["damn, you read the sustainability report. 💧", "right — closed-loop for the win."],
-    liar: [
-      "LIAR. recycling is {true}%, not {guess}%. the steam outside is literally recycled.",
-      "LIAR!! {true}% recycled. the cooling towers saw what you said.",
-    ],
+    liar: ["LIAR. recycling is {true}%, not {guess}%. the steam outside is literally recycled.", "LIAR!! {true}% recycled. the cooling towers saw what you said."],
   },
   {
     question: "peak demand… what % of the campus load is just AI training racks?",
-    prefix: "AI training eats",
-    suffix: "of campus load.",
-    trueValue: 41,
-    tolerance: 6,
+    prefix: "AI training eats", suffix: "of campus load.",
+    trueValue: 41, tolerance: 6,
     vindicated: ["yeah… row D hums day and night. you got it.", "bingo. GPUs are hungry. 🤖"],
-    liar: [
-      "LIAR. AI racks pull {true}%, not {guess}%. listen to them hum.",
-      "LIAR!! {true}% — go stand next to row D and feel it.",
-    ],
+    liar: ["LIAR. AI racks pull {true}%, not {guess}%. listen to them hum.", "LIAR!! {true}% — go stand next to row D and feel it."],
   },
   {
     question: "last one. what % of our waste heat gets reused by the district?",
-    prefix: "We reuse",
-    suffix: "of waste heat.",
-    trueValue: 23,
-    tolerance: 6,
+    prefix: "We reuse", suffix: "of waste heat.",
+    trueValue: 23, tolerance: 6,
     vindicated: ["nailed it. the neighbourhood showers thank us. 🚿", "correct — heat network pipes don't lie."],
-    liar: [
-      "LIAR. heat reuse is {true}%, not {guess}%. the pipes are warm, your take is cold.",
-      "LIAR!! it's {true}%. ask the houses across the road.",
-    ],
+    liar: ["LIAR. heat reuse is {true}%, not {guess}%. the pipes are warm, your take is cold.", "LIAR!! it's {true}%. ask the houses across the road."],
+  },
+  {
+    question: "on a windy day, what % of grid power is just wind?",
+    prefix: "Wind covers", suffix: "of grid power.",
+    trueValue: 47, tolerance: 7,
+    vindicated: ["yep — when it blows, it blows. 🌬️", "correct. check the turbine app sometime."],
+    liar: ["LIAR. wind is {true}%, not {guess}%. look out the window.", "LIAR!! {true}% — the blades don't lie."],
+  },
+  {
+    question: "what % of retired servers get refurbished instead of scrapped?",
+    prefix: "We refurbish", suffix: "of retired servers.",
+    trueValue: 61, tolerance: 7,
+    vindicated: ["correct — the refurb bench is always busy. 🔧", "yep. waste not."],
+    liar: ["LIAR. refurb rate is {true}%, not {guess}%. visit the bench.", "LIAR!! {true}% — the screws remember."],
+  },
+  {
+    question: "at night, what % of load is covered by battery storage?",
+    prefix: "Batteries cover", suffix: "of night load.",
+    trueValue: 18, tolerance: 6,
+    vindicated: ["right — batteries only stretch so far. 🔋", "correct. the container hums till ~3am."],
+    liar: ["LIAR. batteries cover {true}%, not {guess}%.", "LIAR!! {true}% — go hug the battery container."],
   },
 ];
 
-const pick = (arr) => arr[Math.floor(Math.random() * arr.length)];
-const fill = (tpl, r, guess) => tpl.replaceAll("{true}", r.trueValue).replaceAll("{guess}", guess);
+/* --------------------------------- economy -------------------------------- */
+const DAYS = ["MONDAY", "TUESDAY", "WEDNESDAY"];
+const ROUNDS_PER_DAY = 3;
+const BASE_PAY = 50, PER_CORRECT = 20, DEDUCTION = 45;
+const PRICES = { tip: 25, calibration: 35, secondChance: 30 };
 
-/* --------------------------------- state ---------------------------------- */
+let dayNo = 1;           // 1-based
+let balance = 40;
+let warnings = 0;
+let totalCorrect = 0, totalAsked = 0;
+let shop = { tips: 0, calibration: false, secondChance: false }; // for the upcoming day
+let inComputer = false;
 
-let roundIndex = 0;
-let trust = 50;
-let streak = 0;
+const $ = (s) => document.querySelector(s);
+const sceneEl = $("#scene"), hud3d = $("#hud3d"), promptEl = $("#prompt"),
+  promptText = $("#prompt-text"), interactBtn = $("#interact-btn"),
+  dayPill = $("#day-pill"), balTop = $("#bal-top"), warnTop = $("#warn-top"),
+  dayBanner = $("#day-banner"), flash = $("#flash"),
+  computer = $("#computer"), shopEl = $("#shop"), paydayEl = $("#payday"), firedEl = $("#fired");
 
-const chat = document.querySelector("#chat");
-const composer = document.querySelector("#composer");
-const slider = document.querySelector("#slider");
-const draftValue = document.querySelector("#draft-value");
-const draftPrefix = document.querySelector("#draft-prefix");
-const draftSuffix = document.querySelector("#draft-suffix");
-const tolLabel = document.querySelector("#tol-label");
-const sendBtn = document.querySelector("#send");
-const roundLabel = document.querySelector("#round-label");
-const gameoverBox = document.querySelector("#gameover");
-const trustEl = document.querySelector("#m-trust");
-
-slider.addEventListener("input", () => (draftValue.textContent = `${slider.value}%`));
-document.querySelector("#restart").addEventListener("click", () => location.reload());
-
-/* ------------------------------ chat helpers ------------------------------ */
-
-function scrollDown() {
-  chat.scrollTo({ top: chat.scrollHeight, behavior: "smooth" });
+function refreshHud() {
+  dayPill.textContent = `DAY ${dayNo} · ${DAYS[dayNo - 1]}`;
+  balTop.textContent = balance;
+  warnTop.textContent = warnings ? ` · ⚠${warnings}/2` : "";
+  $("#bal-shop").textContent = balance;
 }
-
-function botBubble(text) {
-  const el = document.createElement("div");
-  el.className = "msg bot";
-  el.innerHTML = `<span class="who-line">MARA · AISLE C</span>`;
-  el.append(document.createTextNode(text));
-  chat.appendChild(el);
-  scrollDown();
-  return el;
+function banner(text, ms = 1600) {
+  dayBanner.textContent = text;
+  dayBanner.classList.remove("hidden");
+  dayBanner.classList.remove("show");
+  void dayBanner.offsetWidth;
+  dayBanner.classList.add("show");
+  clearTimeout(banner._t);
+  banner._t = setTimeout(() => dayBanner.classList.add("hidden"), ms);
 }
-
-function youBubble(text) {
-  const el = document.createElement("div");
-  el.className = "msg you";
-  el.innerHTML = `<span class="who-line">YOU</span>`;
-  el.append(document.createTextNode(text));
-  chat.appendChild(el);
-  scrollDown();
-  return el;
+function doFlash() {
+  flash.classList.remove("go");
+  void flash.offsetWidth;
+  flash.classList.add("go");
 }
-
-function verdictPill(text, good) {
-  const el = document.createElement("div");
-  el.className = `verdict ${good ? "good" : "bad"}`;
-  el.textContent = text;
-  chat.appendChild(el);
-  scrollDown();
-}
-
-function typing() {
-  const el = document.createElement("div");
-  el.className = "typing";
-  el.innerHTML = "<i></i><i></i><i></i>";
-  chat.appendChild(el);
-  scrollDown();
-  return el;
-}
-
 const wait = (ms) => new Promise((r) => setTimeout(r, ms));
 
-async function maraSays(text, thinkMs = 950) {
-  const t = typing();
-  await wait(thinkMs);
-  t.remove();
-  botBubble(text);
-  await wait(450);
-}
+/* ---------------------------------- world --------------------------------- */
+const world = createWorld(sceneEl, {
+  onPrompt: (near) => {
+    if (!near || inComputer || !shopEl.classList.contains("hidden") ||
+        !paydayEl.classList.contains("hidden") || !firedEl.classList.contains("hidden")) {
+      promptEl.classList.add("hidden");
+      return;
+    }
+    promptText.textContent = near.label;
+    interactBtn.textContent = "E";
+    promptEl.classList.remove("hidden");
+  },
+  onInteract: (id) => {
+    if (inComputer) return;
+    if (id === "door") {
+      world.setPhase("office");
+      banner("Find your desk — follow the orange marker");
+      puffBurst(true);
+    } else if (id === "desk") {
+      openShop();
+    }
+  },
+});
+interactBtn.addEventListener("click", () => world.tryInteract());
+world.setDayTint(1);
+refreshHud();
 
-/* -------------------------------- game flow ------------------------------- */
-
-async function playRound() {
-  const r = ROUNDS[roundIndex];
-  roundLabel.textContent = `${roundIndex + 1} / ${ROUNDS.length}`;
-  tolLabel.textContent = `±${r.tolerance}%`;
-  draftPrefix.textContent = r.prefix;
-  draftSuffix.textContent = r.suffix;
-
-  await maraSays(r.question);
-
-  // show composer as "your draft reply"
-  slider.value = 50;
-  draftValue.textContent = "50%";
-  composer.classList.remove("hidden");
-  sendBtn.disabled = false;
-  scrollDown();
-}
-
-sendBtn.addEventListener("click", async () => {
-  const r = ROUNDS[roundIndex];
-  const guess = Number(slider.value);
-  const text = `${r.prefix} ${guess}% ${r.suffix}`;
-  sendBtn.disabled = true;
-  composer.classList.add("hidden");
-
-  const bubble = youBubble(text);
-  await wait(650);
-
-  const good = Math.abs(guess - r.trueValue) <= r.tolerance;
-  if (good) {
-    bubble.classList.add("flash-good");
-    streak += 1;
-    trust = Math.min(100, trust + 12 + Math.min(streak * 2, 8));
-    verdictPill(`✓ TRUE VALUE ${r.trueValue}% — within ±${r.tolerance}`, true);
-    puffBurst(true);
-  } else {
-    bubble.classList.add("flash-bad", "shake");
-    streak = 0;
-    trust = Math.max(0, trust - 18);
-    verdictPill(`✗ TRUE VALUE ${r.trueValue}% — you said ${guess}%`, false);
-    puffBurst(false);
-  }
-  trustEl.textContent = trust;
-  await wait(1100);
-
-  if (good) await maraSays(pick(r.vindicated), 800);
-  else await maraSays(fill(pick(r.liar), r, guess), 1100);
-
-  roundIndex += 1;
-  if (roundIndex < ROUNDS.length) {
-    playRound();
-  } else {
-    endGame();
-  }
+// Character creator runs before day 1: world stays frozen behind it,
+// then the chosen look is applied to the walker and the shift begins.
+world.setPaused(true);
+initCustomizer({
+  initial: DEFAULT_LOOK,
+  onConfirm: (look) => {
+    world.setPlayerOptions(look);
+    world.setPaused(false);
+    banner("Walk to the glowing door to start work");
+  },
 });
 
-async function endGame() {
-  const grade =
-    trust >= 80 ? "GRID WHISPERER 🏆" : trust >= 55 ? "CREDIBLE OPERATOR ✔" : trust >= 30 ? "SUSPECTED SPIN DOCTOR ⚠" : "CERTIFIED LIAR 🚨";
-  gameoverBox.classList.remove("hidden");
-  gameoverBox.innerHTML = `<h2>${grade}</h2><p>Final trust: <b>${trust}</b> / 100 across ${ROUNDS.length} claims.<br>Mara has logged your answers in the shift report.</p><button id="again">PLAY AGAIN</button>`;
-  document.querySelector("#again").addEventListener("click", () => location.reload());
-  scrollDown();
-}
-
-/* --------------------------- live fake telemetry --------------------------- */
-
-const pueEl = document.querySelector("#m-pue");
-const loadEl = document.querySelector("#m-load");
-const tempEl = document.querySelector("#m-temp");
-setInterval(() => {
-  pueEl.textContent = (1.38 + Math.random() * 0.08).toFixed(2);
-  loadEl.textContent = `${(37.4 + Math.random() * 2.2).toFixed(1)} MW`;
-  tempEl.textContent = `${(23.6 + Math.random() * 1.2).toFixed(1)}°C`;
-}, 1800);
-
-/* ------------------------- cream steam (Canvas 2D) ------------------------- */
-/* Zero-dependency particle vapour: cheap, 60fps, no WebGL needed. */
-
-const canvas = document.querySelector("#steam");
-const ctx = canvas.getContext("2d");
-let puffs = [];
-let W = 0, H = 0;
-
-function resize() {
-  W = canvas.width = innerWidth;
-  H = canvas.height = innerHeight;
-}
-addEventListener("resize", resize);
-resize();
-
-function spawn(n, good = null) {
-  for (let i = 0; i < n; i++) {
-    puffs.push({
-      x: Math.random() * W,
-      y: H * (0.55 + Math.random() * 0.45),
-      r: 24 + Math.random() * 70,
-      vy: -(0.25 + Math.random() * 0.6),
-      vx: (Math.random() - 0.5) * 0.3,
-      life: 1,
-      decay: 0.0016 + Math.random() * 0.003,
-      // green-tinted vapour on success, warm grey-red on fail, neutral otherwise
-      tint: good === true ? "30,158,106" : good === false ? "190,120,100" : "150,140,120",
-    });
+/* ---------------------------------- shop ---------------------------------- */
+function renderShop() {
+  $("#own-tip").textContent = `Owned: ${shop.tips} (use in chat via 💡 button)`;
+  $("#own-cal").textContent = shop.calibration ? "Owned ✓ (+4% tolerance today)" : "Not owned";
+  $("#own-sec").textContent = shop.secondChance ? "Owned ✓ (one mulligan today)" : "Not owned";
+  for (const [key, btn] of [["tip", "#buy-tip"], ["calibration", "#buy-cal"], ["secondChance", "#buy-sec"]]) {
+    const b = $(btn);
+    const owned = key === "tip" ? false : shop[key];
+    b.disabled = owned || balance < PRICES[key];
+    b.textContent = owned ? "OWNED" : `BUY £${PRICES[key]}`;
   }
-  if (puffs.length > 220) puffs = puffs.slice(-220);
+  refreshHud();
+}
+function buy(key) {
+  if (balance < PRICES[key]) return;
+  if (key !== "tip" && shop[key]) return;
+  balance -= PRICES[key];
+  if (key === "tip") shop.tips += 1;
+  else shop[key] = true;
+  renderShop();
+}
+$("#buy-tip").addEventListener("click", () => buy("tip"));
+$("#buy-cal").addEventListener("click", () => buy("calibration"));
+$("#buy-sec").addEventListener("click", () => buy("secondChance"));
+
+function openShop() {
+  world.setPaused(true);
+  renderShop();
+  $("#shop-day").textContent = `DAY ${dayNo} · ${DAYS[dayNo - 1]} — buy before you clock in`;
+  shopEl.classList.remove("hidden");
 }
 
-function puffBurst(good) {
-  spawn(good ? 26 : 18, good);
+$("#clockin").addEventListener("click", async () => {
+  shopEl.classList.add("hidden");
+  await enterComputer();
+});
+
+/* -------------------------------- computer -------------------------------- */
+async function enterComputer() {
+  inComputer = true;
+  doFlash();
+  await wait(350);
+  world.setPaused(true);
+  world.setVisible(false);
+  hud3d.classList.add("hidden");
+  promptEl.classList.add("hidden");
+  computer.classList.remove("hidden");
+
+  const rounds = [...POOL].sort(() => Math.random() - 0.5).slice(0, ROUNDS_PER_DAY);
+  const mods = {
+    tips: shop.tips,
+    calibration: shop.calibration,
+    secondChance: shop.secondChance,
+    secondChanceUsed: false,
+  };
+  const res = await startDay(rounds, mods, dayNo);
+  shop.tips = mods.tips; // persist unused tips
+  await exitComputer(res);
 }
 
-function tick() {
-  ctx.clearRect(0, 0, W, H);
-  if (puffs.length < 60 && Math.random() < 0.25) spawn(1);
-  for (const p of puffs) {
-    p.x += p.vx + Math.sin(p.y * 0.01) * 0.3;
-    p.y += p.vy;
-    p.life -= p.decay;
-    p.r += 0.12;
-    if (p.life <= 0 || p.y < -120) continue;
-    const a = Math.max(0, p.life) * 0.10;
-    const g = ctx.createRadialGradient(p.x, p.y, 0, p.x, p.y, p.r);
-    g.addColorStop(0, `rgba(${p.tint},${a})`);
-    g.addColorStop(1, `rgba(${p.tint},0)`);
-    ctx.fillStyle = g;
-    ctx.beginPath();
-    ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
-    ctx.fill();
+async function exitComputer(res) {
+  totalCorrect += res.correct;
+  totalAsked += res.total;
+  doFlash();
+  await wait(350);
+  computer.classList.add("hidden");
+  world.setVisible(true);
+  world.setPaused(false);
+  hud3d.classList.remove("hidden");
+  inComputer = false;
+  showPayday(res);
+}
+
+/* --------------------------------- payday --------------------------------- */
+function showPayday(res) {
+  const earned = BASE_PAY + res.correct * PER_CORRECT;
+  const net = earned - DEDUCTION;
+  balance += net;
+  const bad = res.correct <= 1;
+  if (bad) warnings += 1;
+  // reset daily buffs; tips persist (already synced)
+  shop = { tips: shop.tips, calibration: false, secondChance: false };
+
+  const fired = warnings >= 2 || balance < -20;
+  const lastDay = dayNo >= DAYS.length;
+
+  $("#pay-title").textContent = `DAY ${dayNo} PAYCHECK`;
+  $("#pay-rows").innerHTML =
+    `<div class="prow"><span>Base pay</span><b>+£${BASE_PAY}</b></div>` +
+    `<div class="prow"><span>Correct answers (${res.correct}/${res.total})</span><b>+£${res.correct * PER_CORRECT}</b></div>` +
+    `<div class="prow"><span>Rent & noodles</span><b>−£${DEDUCTION}</b></div>` +
+    `<div class="prow total"><span>Net</span><b>${net >= 0 ? "+" : ""}£${net}</b></div>` +
+    `<div class="prow"><span>Balance</span><b>£${balance}</b></div>` +
+    `<div class="prow"><span>Trust</span><b>${getTrust()}</b></div>` +
+    (bad ? `<p class="warnline">⚠ Bad shift (${res.correct}/${res.total} right). Warning ${warnings}/2 — two strikes and you're fired.</p>`
+         : `<p class="niceline">Solid shift. Mara vouched for you. ✅</p>`);
+  const nextBtn = $("#next-day");
+  if (fired) {
+    nextBtn.textContent = "FACE THE CONSEQUENCES →";
+  } else if (lastDay) {
+    nextBtn.textContent = "FINISH CONTRACT →";
+  } else {
+    nextBtn.textContent = `START DAY ${dayNo + 1} →`;
   }
-  puffs = puffs.filter((p) => p.life > 0 && p.y > -130);
-  requestAnimationFrame(tick);
+  nextBtn.onclick = () => {
+    paydayEl.classList.add("hidden");
+    if (fired) return showFired(false);
+    if (lastDay) return showFired(true);
+    dayNo += 1;
+    world.setDayTint(dayNo);
+    world.setPhase("street");
+    refreshHud();
+    banner(`DAY ${dayNo} · ${DAYS[dayNo - 1]} — walk in again`);
+  };
+  paydayEl.classList.remove("hidden");
+  refreshHud();
 }
-spawn(50);
-tick();
 
-/* ---------------------------------- boot ----------------------------------- */
-
-(async function boot() {
-  trustEl.textContent = trust;
-  await wait(400);
-  await maraSays("psst. new shift? i'm mara — I run aisle C. 🌬️", 700);
-  await maraSays("management keeps posting headlines about us. tell me what YOU think is true… and don't lie to me.", 1100);
-  playRound();
-})();
+/* ------------------------------- fired / win ------------------------------ */
+function showFired(finished) {
+  world.setPaused(true);
+  const won = finished && warnings < 2 && balance >= -20;
+  $("#fired-title").textContent = won ? "CONTRACT COMPLETE 🎉" : "YOU'RE FIRED 🚨";
+  $("#fired-body").innerHTML = won
+    ? `3 days survived. Score: <b>${totalCorrect}/${totalAsked}</b> correct.<br>Final balance: <b>£${balance}</b> · Trust: <b>${getTrust()}</b><br>Mara recommends you for floor manager.`
+    : (balance < -20
+      ? `Debt collectors (and Mara) found you.<br>Balance: <b>£${balance}</b> · Score: <b>${totalCorrect}/${totalAsked}</b>.`
+      : `Two bad shifts. Security escorted you past the turbines.<br>Score: <b>${totalCorrect}/${totalAsked}</b> · Balance: <b>£${balance}</b>.`);
+  firedEl.classList.remove("hidden");
+}
+$("#again").addEventListener("click", () => location.reload());
+$("#restart").addEventListener("click", () => location.reload());

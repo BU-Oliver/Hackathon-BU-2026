@@ -3,81 +3,164 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Grid Truth — Datacenter Chat</title>
+    <title>Grid Truth — Office Days</title>
   </head>
   <body>
     <canvas id="steam"></canvas>
+    <div id="scene"></div>
+    <div id="flash"></div>
 
-    <!-- ambient datacenter silhouette -->
-    <div class="racks" aria-hidden="true">
-      <div class="rack left">
-        <div class="slot" style="--d:0s"></div><div class="slot" style="--d:.4s"></div>
-        <div class="slot" style="--d:1.1s"></div><div class="slot" style="--d:.7s"></div>
-        <div class="slot" style="--d:1.6s"></div><div class="slot" style="--d:.2s"></div>
-        <div class="slot" style="--d:2s"></div><div class="slot" style="--d:1.3s"></div>
+    <!-- 3D HUD -->
+    <div id="hud3d">
+      <div class="hud-top">
+        <div class="day-pill" id="day-pill">DAY 1 · MONDAY</div>
+        <div class="bal-pill">£<span id="bal-top">40</span><span id="warn-top"></span></div>
       </div>
-      <div class="rack right">
-        <div class="slot" style="--d:.9s"></div><div class="slot" style="--d:.1s"></div>
-        <div class="slot" style="--d:1.9s"></div><div class="slot" style="--d:.5s"></div>
-        <div class="slot" style="--d:1.4s"></div><div class="slot" style="--d:2.2s"></div>
-        <div class="slot" style="--d:.8s"></div><div class="slot" style="--d:1.7s"></div>
+      <div class="controls-hint">WASD / arrows to walk · E to interact</div>
+      <div id="prompt" class="prompt hidden">
+        <span id="prompt-text"></span>
+        <button id="interact-btn" title="Interact">E</button>
+      </div>
+    </div>
+    <div id="day-banner" class="day-banner hidden"></div>
+
+    <!-- COMPUTER: the chat shift (your existing UI) -->
+    <div id="computer" class="computer hidden">
+      <div class="racks" aria-hidden="true">
+        <div class="rack left">
+          <div class="slot" style="--d:0s"></div><div class="slot" style="--d:.4s"></div>
+          <div class="slot" style="--d:1.1s"></div><div class="slot" style="--d:.7s"></div>
+          <div class="slot" style="--d:1.6s"></div><div class="slot" style="--d:.2s"></div>
+        </div>
+        <div class="rack right">
+          <div class="slot" style="--d:.9s"></div><div class="slot" style="--d:.1s"></div>
+          <div class="slot" style="--d:1.9s"></div><div class="slot" style="--d:.5s"></div>
+          <div class="slot" style="--d:1.4s"></div><div class="slot" style="--d:2.2s"></div>
+        </div>
+      </div>
+
+      <main class="stage">
+        <header class="statusbar">
+          <div class="brand">
+            <span class="dot"></span>
+            <strong>GRID&nbsp;TRUTH</strong>
+            <em>work terminal — logged in</em>
+          </div>
+          <div class="meters">
+            <div class="meter"><label>PUE</label><b id="m-pue">1.42</b></div>
+            <div class="meter"><label>LOAD</label><b id="m-load">38.2 MW</b></div>
+            <div class="meter"><label>AISLE</label><b id="m-temp">24.1°C</b></div>
+            <div class="meter trust"><label>TRUST</label><b id="m-trust">50</b></div>
+          </div>
+        </header>
+
+        <section class="phone">
+          <div class="phone-top">
+            <div class="avatar">M</div>
+            <div class="who">
+              <strong>Mara · Facility Insider</strong>
+              <span id="presence"><i class="pulse"></i> online — aisle C</span>
+            </div>
+            <div class="round" id="round-label">DAY 1</div>
+          </div>
+
+          <div id="chat" class="chat" aria-live="polite"></div>
+
+          <div id="composer" class="composer hidden">
+            <div class="draft-label">YOUR REPLY — drag to set X, then send</div>
+            <div class="draft">
+              <span id="draft-prefix">The electricity running this datacenter is</span>
+              <strong id="draft-value">50%</strong>
+              <span id="draft-suffix">renewable.</span>
+            </div>
+            <div class="slider-row">
+              <span>0%</span>
+              <input id="slider" type="range" min="0" max="100" value="50" step="1" />
+              <span>100%</span>
+            </div>
+            <button id="use-tip" class="tipbtn" style="display:none">💡 USE TIP</button>
+            <button id="send">SEND&nbsp;↩</button>
+            <div class="tolerance">Nail it within ±<b id="tol-label">6%</b> to stay credible.</div>
+          </div>
+        </section>
+
+        <footer class="foot">
+          Answer all headlines to finish your shift.
+          <button id="restart" class="link">restart</button>
+        </footer>
+      </main>
+    </div>
+
+    <!-- CHARACTER CREATOR -->
+    <div id="customizer" class="overlay hidden">
+      <div class="card wide">
+        <div class="card-kicker">new hire paperwork</div>
+        <h2>Who's clocking in?</h2>
+        <p class="sub">Build your guy — this is who walks the aisles.</p>
+        <div class="cust-layout">
+          <div class="cust-preview">
+            <canvas id="cust-canvas" width="240" height="280"></canvas>
+            <div class="cust-name">YOU · NEW HIRE</div>
+          </div>
+          <div class="cust-opts">
+            <div class="opt-group"><label>SKIN</label><div class="swatches" id="cg-skin"></div></div>
+            <div class="opt-group"><label>HAIRCUT</label><div class="picks" id="cg-haircut"></div></div>
+            <div class="opt-group"><label>HAIR COLOUR</label><div class="swatches" id="cg-haircol"></div></div>
+            <div class="opt-group"><label>FACE</label><div class="picks" id="cg-face"></div></div>
+            <div class="opt-group"><label>EYES</label><div class="picks" id="cg-eyes"></div></div>
+            <div class="opt-group"><label>BROWS</label><div class="picks" id="cg-brows"></div></div>
+            <div class="opt-group"><label>MOUTH</label><div class="picks" id="cg-mouth"></div></div>
+            <div class="opt-group"><label>SHIRT</label><div class="swatches" id="cg-shirt"></div></div>
+            <div class="opt-group"><label>OUTFIT · PANTS</label><div class="swatches" id="cg-pants"></div></div>
+          </div>
+        </div>
+        <button id="cust-done" class="primary">START JOB →</button>
       </div>
     </div>
 
-    <main class="stage">
-      <!-- status strip: datacenter feel without 3D -->
-      <header class="statusbar">
-        <div class="brand">
-          <span class="dot"></span>
-          <strong>GRID&nbsp;TRUTH</strong>
-          <em>datacenter&nbsp;#04 — live chat</em>
+    <!-- SHOP: buy before you clock in -->
+    <div id="shop" class="overlay hidden">
+      <div class="card">
+        <div class="card-kicker" id="shop-day">DAY 1 — buy before you clock in</div>
+        <h2>Corner Shop 🏪</h2>
+        <p class="sub">Wallet: £<b id="bal-shop">40</b> · Buffs apply to today's shift. Tips stack, others are one-a-day.</p>
+        <div class="shop-item">
+          <div><strong>💡 Insider Tip ×1</strong><br><span>Mara leaks the true range (±10%) for one question.</span></div>
+          <div class="shop-row"><button id="buy-tip">BUY £25</button></div>
+          <div class="owned" id="own-tip"></div>
         </div>
-        <div class="meters">
-          <div class="meter"><label>PUE</label><b id="m-pue">1.42</b></div>
-          <div class="meter"><label>LOAD</label><b id="m-load">38.2 MW</b></div>
-          <div class="meter"><label>AISLE</label><b id="m-temp">24.1°C</b></div>
-          <div class="meter trust"><label>TRUST</label><b id="m-trust">50</b></div>
+        <div class="shop-item">
+          <div><strong>📏 Calibrated Meter</strong><br><span>+4% tolerance on every question today.</span></div>
+          <div class="shop-row"><button id="buy-cal">BUY £35</button></div>
+          <div class="owned" id="own-cal"></div>
         </div>
-      </header>
-
-      <!-- phone / chat card -->
-      <section class="phone">
-        <div class="phone-top">
-          <div class="avatar">M</div>
-          <div class="who">
-            <strong>Mara · Facility Insider</strong>
-            <span id="presence"><i class="pulse"></i> online — aisle C</span>
-          </div>
-          <div class="round" id="round-label">1 / 5</div>
+        <div class="shop-item">
+          <div><strong>🔁 Second Chance</strong><br><span>One mulligan: retry a wrong answer today.</span></div>
+          <div class="shop-row"><button id="buy-sec">BUY £30</button></div>
+          <div class="owned" id="own-sec"></div>
         </div>
+        <button id="clockin" class="primary">CLOCK IN — START SHIFT →</button>
+      </div>
+    </div>
 
-        <div id="chat" class="chat" aria-live="polite"></div>
+    <!-- PAYDAY -->
+    <div id="payday" class="overlay hidden">
+      <div class="card">
+        <div class="card-kicker">end of day</div>
+        <h2 id="pay-title">PAYCHECK</h2>
+        <div id="pay-rows"></div>
+        <button id="next-day" class="primary">START NEXT DAY →</button>
+      </div>
+    </div>
 
-        <!-- composer: appears only when it's your turn -->
-        <div id="composer" class="composer hidden">
-          <div class="draft-label">YOUR REPLY — drag to set X, then send</div>
-          <div class="draft">
-            <span id="draft-prefix">The electricity running this datacenter is</span>
-            <strong id="draft-value">50%</strong>
-            <span id="draft-suffix">renewable.</span>
-          </div>
-          <div class="slider-row">
-            <span>0%</span>
-            <input id="slider" type="range" min="0" max="100" value="50" step="1" />
-            <span>100%</span>
-          </div>
-          <button id="send">SEND&nbsp;↩</button>
-          <div class="tolerance">Naile it within ±<b id="tol-label">6%</b> to stay credible.</div>
-        </div>
-
-        <div id="gameover" class="gameover hidden"></div>
-      </section>
-
-      <footer class="foot">
-        Cream UI · Canvas steam · Zero 3D libs — runs at 60fps on any laptop.
-        <button id="restart" class="link">restart</button>
-      </footer>
-    </main>
+    <!-- FIRED / WIN -->
+    <div id="fired" class="overlay hidden">
+      <div class="card center">
+        <h2 id="fired-title">YOU'RE FIRED 🚨</h2>
+        <p id="fired-body" class="sub"></p>
+        <button id="again" class="primary">APPLY AGAIN (restart)</button>
+      </div>
+    </div>
 
     <script type="module" src="./src/main.js"></script>
   </body>
