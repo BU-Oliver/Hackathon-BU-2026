@@ -3,31 +3,82 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Headline or Hype?</title>
+    <title>Grid Truth — Datacenter Chat</title>
   </head>
   <body>
-    <div id="game"></div>
-    <div id="hud">
-      <div class="brand">HEADLINE <span>OR</span> HYPE?</div>
-      <div class="hint">Walk to the terminal. A visitor will bring you a headline to investigate.</div>
-    </div>
-    <div id="terminal-ui" class="hidden">
-      <div class="terminal-window">
-        <div class="terminal-top"><span>●</span><span>●</span><span>●</span><strong>EVIDENCE TERMINAL // 01</strong></div>
-        <div id="headline" class="headline"></div>
-        <p class="question">What share of the facility's electricity is generated from renewable sources?</p>
-        <div class="slider-row">
-          <span>0%</span>
-          <input id="renewable-slider" type="range" min="0" max="100" value="50" step="1" />
-          <span>100%</span>
-        </div>
-        <div id="guess" class="guess">50%</div>
-        <button id="submit">CHECK EVIDENCE</button>
-        <div id="result" class="result"></div>
-        <button id="next" class="secondary hidden">NEXT HEADLINE</button>
+    <canvas id="steam"></canvas>
+
+    <!-- ambient datacenter silhouette -->
+    <div class="racks" aria-hidden="true">
+      <div class="rack left">
+        <div class="slot" style="--d:0s"></div><div class="slot" style="--d:.4s"></div>
+        <div class="slot" style="--d:1.1s"></div><div class="slot" style="--d:.7s"></div>
+        <div class="slot" style="--d:1.6s"></div><div class="slot" style="--d:.2s"></div>
+        <div class="slot" style="--d:2s"></div><div class="slot" style="--d:1.3s"></div>
+      </div>
+      <div class="rack right">
+        <div class="slot" style="--d:.9s"></div><div class="slot" style="--d:.1s"></div>
+        <div class="slot" style="--d:1.9s"></div><div class="slot" style="--d:.5s"></div>
+        <div class="slot" style="--d:1.4s"></div><div class="slot" style="--d:2.2s"></div>
+        <div class="slot" style="--d:.8s"></div><div class="slot" style="--d:1.7s"></div>
       </div>
     </div>
-    <div id="crosshair">+</div>
+
+    <main class="stage">
+      <!-- status strip: datacenter feel without 3D -->
+      <header class="statusbar">
+        <div class="brand">
+          <span class="dot"></span>
+          <strong>GRID&nbsp;TRUTH</strong>
+          <em>datacenter&nbsp;#04 — live chat</em>
+        </div>
+        <div class="meters">
+          <div class="meter"><label>PUE</label><b id="m-pue">1.42</b></div>
+          <div class="meter"><label>LOAD</label><b id="m-load">38.2 MW</b></div>
+          <div class="meter"><label>AISLE</label><b id="m-temp">24.1°C</b></div>
+          <div class="meter trust"><label>TRUST</label><b id="m-trust">50</b></div>
+        </div>
+      </header>
+
+      <!-- phone / chat card -->
+      <section class="phone">
+        <div class="phone-top">
+          <div class="avatar">M</div>
+          <div class="who">
+            <strong>Mara · Facility Insider</strong>
+            <span id="presence"><i class="pulse"></i> online — aisle C</span>
+          </div>
+          <div class="round" id="round-label">1 / 5</div>
+        </div>
+
+        <div id="chat" class="chat" aria-live="polite"></div>
+
+        <!-- composer: appears only when it's your turn -->
+        <div id="composer" class="composer hidden">
+          <div class="draft-label">YOUR REPLY — drag to set X, then send</div>
+          <div class="draft">
+            <span id="draft-prefix">The electricity running this datacenter is</span>
+            <strong id="draft-value">50%</strong>
+            <span id="draft-suffix">renewable.</span>
+          </div>
+          <div class="slider-row">
+            <span>0%</span>
+            <input id="slider" type="range" min="0" max="100" value="50" step="1" />
+            <span>100%</span>
+          </div>
+          <button id="send">SEND&nbsp;↩</button>
+          <div class="tolerance">Naile it within ±<b id="tol-label">6%</b> to stay credible.</div>
+        </div>
+
+        <div id="gameover" class="gameover hidden"></div>
+      </section>
+
+      <footer class="foot">
+        Cream UI · Canvas steam · Zero 3D libs — runs at 60fps on any laptop.
+        <button id="restart" class="link">restart</button>
+      </footer>
+    </main>
+
     <script type="module" src="./src/main.js"></script>
   </body>
 </html>
