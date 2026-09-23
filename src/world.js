@@ -312,14 +312,18 @@ export function createWorld(container, opts = {}) {
   canopySign.position.set(0, 3.72, 0.95);
   street.add(canopySign);
 
-  // small wayfinding plate by the door
+  // wayfinding plate bolted to the pavilion glass.
+  // NB: sits clear of the mullion (front face z=-0.41) and the sign face sits
+  // clear of its own backing plate — coplanar faces here caused z-fighting.
+  box(1.72, 0.62, 0.06, frameMat, -2.4, 2.62, -0.36, street);
   const plate = new THREE.Mesh(
     new THREE.PlaneGeometry(1.5, 0.42),
     new THREE.MeshBasicMaterial({ map: textTexture("STAFF ENTRY", { w: 384, h: 108, bg: "#1e9e6a", fg: "#ffffff", font: 62 }) })
   );
-  plate.position.set(-4.6, 1.7, -0.45);
+  plate.position.set(-2.4, 2.62, -0.31);
   street.add(plate);
-  box(0.12, 0.5, 0.1, frameMat, -4.6, 1.45, -0.5, street);
+  // small standoff brackets so it reads as mounted, not floating
+  for (const sx of [-3.05, -1.75]) box(0.07, 0.07, 0.12, frameMat, sx, 2.62, -0.43, street);
 
   // glass office block to the right (the reference's office wing)
   caster(box(9.5, 5.2, 7.4, hallMat, 13.5, 2.6, -6.5, street));
@@ -547,13 +551,24 @@ export function createWorld(container, opts = {}) {
     box(len, 0.6, 0.4, stoneMat, x, 0.3, z, street);
   }
 
-  /* ---- lake (east) with jetty ---- */
-  flat(21, 16, lam(0x8a7a5a), 32, 0.005, 2);
-  flat(18, 13, lam(0x6fb3c8), 32, 0.04, 2);
-  box(4.5, 0.12, 1.4, lam(0x7a5a3a), 23.5, 0.3, 2, street);
-  for (const [jx, jz] of [[21.8, 1.5], [21.8, 2.5], [25.2, 1.5], [25.2, 2.5]]) {
-    cyl(0.09, 0.09, 0.7, lam(0x5a422c), jx, 0.15, jz, street, 7);
+  /* ---- lake (far east, clear of the car park) with a proper jetty ---- */
+  flat(23, 17, lam(0x8a7a5a), 44, 0.005, 2);
+  flat(19, 13, lam(0x6fb3c8), 44, 0.04, 2);
+  // jetty: deck resting on posts that actually stand in the water
+  const jettyX = 34.5;
+  box(5.0, 0.14, 1.5, lam(0x7a5a3a), jettyX, 0.42, 2, street);
+  for (let i = 0; i < 5; i++) {
+    box(5.0, 0.06, 0.22, lam(0x8a6a48), jettyX, 0.52, 1.45 + i * 0.28, street);
   }
+  for (const jx of [32.4, 36.6]) {
+    for (const jz of [1.5, 2.5]) cyl(0.1, 0.1, 1.1, lam(0x5a422c), jx, 0.1, jz, street, 7);
+  }
+  // little rowing boat tied to the end
+  const hull = new THREE.Mesh(new THREE.CapsuleGeometry(0.28, 1.0, 4, 8), lam(0x8a4a3a));
+  hull.rotation.z = Math.PI / 2;
+  hull.position.set(37.6, 0.16, 3.4);
+  hull.scale.set(1, 1, 0.55);
+  caster(hull);
 
   /* ---- sheep paddock (south-east, in view of the forecourt) ---- */
   const padMat = lam(0x7a5a3a);
@@ -615,14 +630,16 @@ export function createWorld(container, opts = {}) {
   for (let i = 0; i < 26; i++) {
     const x = -55 + rnd() * 110;
     const z = rnd() < 0.5 ? -34 - rnd() * 14 : 30 + rnd() * 26;
-    if (x > -50 && x < -20 && z > -2 && z < 22) continue; // keep village clear
-    if (x > 20 && x < 44 && z > -8 && z < 24) continue;   // keep lake/paddock clear
+    if (x > -50 && x < -20 && z > -2 && z < 24) continue; // keep village clear
+    if (x > 30 && x < 58 && z > -10 && z < 26) continue;   // keep lake clear
     if (x > -24 && x < 32) continue;                      // keep campus clear
+    if (x > -24 && x < -4 && z > 8 && z < 18) continue;   // keep forecourt clear
     if (rnd() < 0.55) roundTree(x, z, 0.9 + rnd() * 1.1, (rnd() * 3) | 0);
     else pineTree(x, z, 0.9 + rnd() * 1.1);
   }
-  roundTree(-15, 6, 1.25, 0); roundTree(6.5, 14, 1.05, 1); pineTree(-19, 20, 1.35);
-  roundTree(-11, 12, 0.9, 2); roundTree(10, 3.5, 0.85, 0);
+  roundTree(-15, 5, 1.25, 0); roundTree(6.5, 13, 1.05, 1);
+  roundTree(-16.5, 16, 0.95, 2); roundTree(12.5, 4, 0.9, 0);
+  pineTree(-28, 22, 1.3);
 
   /* ---- distant hills (hazed by fog) ---- */
   function hill(x, z, r, col) {
@@ -720,11 +737,31 @@ export function createWorld(container, opts = {}) {
   oFloor.rotation.x = -Math.PI / 2;
   oFloor.position.set(0, 0, -8);
   office.add(oFloor);
-  // vinyl strip in front of the entrance
-  const oVinyl = receiver(new THREE.Mesh(new THREE.PlaneGeometry(18, 2.6), lam(0xb9b2a2)));
+  const oVinylTex = (() => {
+    const c = document.createElement("canvas");
+    c.width = c.height = 64;
+    const x = c.getContext("2d");
+    x.fillStyle = "#a8a396"; x.fillRect(0, 0, 64, 64);
+    for (let i = 0; i < 200; i++) {
+      x.fillStyle = Math.random() > 0.5 ? "rgba(255,255,255,.10)" : "rgba(0,0,0,.10)";
+      x.fillRect(Math.random() * 64, Math.random() * 64, 2, 2);
+    }
+    x.strokeStyle = "rgba(0,0,0,.18)"; x.lineWidth = 2;
+    x.strokeRect(1, 1, 62, 62);
+    const t = new THREE.CanvasTexture(c);
+    t.wrapS = t.wrapT = THREE.RepeatWrapping;
+    t.repeat.set(10, 2);
+    t.colorSpace = THREE.SRGBColorSpace;
+    return t;
+  })();
+  // vinyl entrance strip inside the room
+  const oVinyl = receiver(new THREE.Mesh(new THREE.PlaneGeometry(18, 2.6), new THREE.MeshLambertMaterial({ map: oVinylTex })));
   oVinyl.rotation.x = -Math.PI / 2;
   oVinyl.position.set(0, 0.012, -2.3);
   office.add(oVinyl);
+  // threshold strip so carpet -> vinyl -> concrete reads as deliberate
+  box(18, 0.05, 0.16, lam(0x8d9295), 0, 0.025, -0.98, office);
+  box(18, 0.05, 0.1, lam(0x8d9295), 0, 0.02, -3.62, office);
 
   const wallMat = lam(0xf2ece0);
   const wallLower = lam(0xd9d2c2);
@@ -757,10 +794,15 @@ export function createWorld(container, opts = {}) {
   const shell = new THREE.Mesh(new THREE.BoxGeometry(34, 9, 30), shellMat);
   shell.position.set(0, 4.4, -8);
   office.add(shell);
-  const shellFloor = receiver(new THREE.Mesh(new THREE.PlaneGeometry(34, 30), lam(0x8d8a82)));
+  const concreteTex = noiseTexture("#8d8a82", ["#7f7c75", "#98958c", "#6f6c66"], 128, 700);
+  concreteTex.repeat.set(10, 9);
+  const shellFloor = receiver(new THREE.Mesh(new THREE.PlaneGeometry(34, 30), new THREE.MeshLambertMaterial({ map: concreteTex })));
   shellFloor.rotation.x = -Math.PI / 2;
   shellFloor.position.set(0, -0.02, -8);
   office.add(shellFloor);
+  // expansion joints so the concrete isn't one flat expanse
+  for (let jz = -20; jz <= 4; jz += 4) box(34, 0.01, 0.06, lam(0x6f6c66), 0, 0.001, jz, office);
+  for (let jx = -16; jx <= 16; jx += 4) box(0.06, 0.01, 30, lam(0x6f6c66), jx, 0.001, -8, office);
   // lockers against the east wall by the entrance (kept clear of the camera)
   const lockerMat = lam(0x9aa39c);
   for (let i = 0; i < 4; i++) {
@@ -1178,6 +1220,7 @@ export function createWorld(container, opts = {}) {
     setDayTint,
     tryInteract,
     setPlayerOptions,
+    teleport: (x, z) => player.position.set(x, 0, z),
     setPaused: (b) => { paused = b; if (!b) clock.getDelta(); },
     setVisible: (b) => { container.style.display = b ? "" : "none"; },
     getPhase: () => phase,

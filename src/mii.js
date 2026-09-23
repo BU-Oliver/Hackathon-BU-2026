@@ -45,9 +45,11 @@ export function createMii(options = {}) {
   const inkMat = flat(0x141210);
   const mouthMat = flat(0x3a2018);
 
-  /* ---- head metrics (single source of truth) ---- */
+  /* ---- head metrics (single source of truth) ----
+   * A rounded oval: ~0.67 wide × 0.87 tall. Tall enough to read as a Mii,
+   * not so stretched that it looks like an egg. */
   const HEAD_Y = 1.55;
-  const RX = 0.31, RY = 0.45, RZ = 0.27;
+  const RX = 0.335, RY = 0.435, RZ = 0.285;
   // surface z of the head at a given (x, y) so features hug the curve
   const faceZ = (x, y) =>
     RZ * Math.sqrt(Math.max(0, 1 - (x / RX) ** 2 - (y / RY) ** 2));
@@ -74,14 +76,21 @@ export function createMii(options = {}) {
     inner.add(shoe);
   }
 
-  /* ---- legs: pivot at the hip (y 0.58) ---- */
+  /* ---- legs: pivot at the hip (y 0.58), shoe parented to the pivot so it
+   * swings with the leg instead of detaching ---- */
   const HIP_Y = 0.58;
   function leg(side) {
     const pivot = new THREE.Group();
     pivot.position.set(0.105 * side, HIP_Y, 0);
-    const limb = new THREE.Mesh(new THREE.CylinderGeometry(0.072, 0.062, 0.42, 10), pantsMat);
-    limb.position.y = -0.21;
+    const limb = new THREE.Mesh(new THREE.CylinderGeometry(0.075, 0.062, 0.48, 10), pantsMat);
+    limb.position.y = -0.24;
     pivot.add(limb);
+    const shoe = new THREE.Mesh(new THREE.SphereGeometry(1, 12, 8), shoesMat);
+    shoe.scale.set(0.092, 0.078, 0.16);
+    shoe.position.set(0, -0.508, 0.05);
+    shoe.rotation.y = 0.14 * side; // toes out a touch
+    pivot.add(shoe);
+    pivot.userData.shoe = shoe;
     inner.add(pivot);
     return pivot;
   }
@@ -143,12 +152,12 @@ export function createMii(options = {}) {
   for (const s of [-1, 1]) {
     const ear = new THREE.Mesh(new THREE.SphereGeometry(1, 10, 8), skinMat);
     ear.scale.set(0.05, 0.08, 0.04);
-    ear.position.set(0.292 * s, -0.07, -0.02);
+    ear.position.set(0.315 * s, -0.07, -0.02);
     headG.add(ear);
   }
 
   /* ---- eyes: big Mii ovals, wide apart, just below centre ---- */
-  const EYE_X = 0.142, EYE_Y = -0.05;
+  const EYE_X = 0.15, EYE_Y = -0.045;
   const eyes = [];
   if (eyeStyle === "happy") {
     for (const s of [-1, 1]) {
@@ -193,10 +202,10 @@ export function createMii(options = {}) {
   /* ---- brows: thick slashes just above the eyes ---- */
   if (browStyle !== "none") {
     const cfg = {
-      classic: { w: 0.115, h: 0.038, y: 0.062, a: -0.13 },
-      angry: { w: 0.13, h: 0.046, y: 0.05, a: 0.42 },
-      soft: { w: 0.095, h: 0.022, y: 0.082, a: 0.05 },
-    }[browStyle] || { w: 0.115, h: 0.038, y: 0.062, a: -0.13 };
+      classic: { w: 0.12, h: 0.038, y: 0.055, a: -0.13 },
+      angry: { w: 0.135, h: 0.046, y: 0.045, a: 0.42 },
+      soft: { w: 0.1, h: 0.022, y: 0.075, a: 0.05 },
+    }[browStyle] || { w: 0.12, h: 0.038, y: 0.055, a: -0.13 };
     for (const s of [-1, 1]) {
       const x = EYE_X * s;
       const brow = new THREE.Mesh(new THREE.BoxGeometry(cfg.w, cfg.h, 0.024), inkMat);
@@ -216,7 +225,7 @@ export function createMii(options = {}) {
   headG.add(noseTip);
 
   /* ---- mouth: straight line low on the face ---- */
-  const MOUTH_Y = -0.268;
+  const MOUTH_Y = -0.255;
   if (mouthStyle === "smile") {
     const smile = new THREE.Mesh(new THREE.TorusGeometry(0.075, 0.016, 6, 16, Math.PI), mouthMat);
     smile.rotation.z = Math.PI;
@@ -233,8 +242,10 @@ export function createMii(options = {}) {
     headG.add(mouth);
   }
 
-  /* ---- hair: ellipsoid shells so every style hugs the oval head ---- */
-  const HS = 1.055; // hair sits just proud of the skull
+  /* ---- hair: ellipsoid shells so every style hugs the oval head.
+   * HS is deliberately generous (1.1): at 1.05 the shells sat practically
+   * flush with the skull and read as "hair inside the head". ---- */
+  const HS = 1.1;
   function shell(thetaStart, thetaLength, phiStart = 0, phiLength = Math.PI * 2, r = HS) {
     const m = new THREE.Mesh(new THREE.SphereGeometry(1, 22, 14, phiStart, phiLength, thetaStart, thetaLength), hairMat);
     m.scale.set(RX * r, RY * r, RZ * r);
@@ -242,30 +253,26 @@ export function createMii(options = {}) {
   }
   // crown sits high, then a separate fringe band sweeps down over the
   // forehead to just above the brows — that's the Mii bowl silhouette.
-  const CROWN = 1.12;          // y ≈ 0.21
-  const FRINGE_END = 1.43;     // y ≈ 0.07, just above the brows
+  const CROWN = 1.12;          // y ≈ 0.20
+  const FRINGE_END = 1.36;     // y ≈ 0.10, a sliver of forehead above the brows
   const FRONT = Math.PI / 2;   // +Z
   const FRINGE_ARC = 1.25;     // how far the fringe wraps toward the temples
-  const BACK_PHI = Math.PI;
-  const BACK_LEN = Math.PI;
+  // The back/side shell wraps ~280° so the hair comes down past the ears and
+  // hides them, instead of separate sideburn slabs poking out of the cheeks.
+  const BACK_PHI = FRONT + 0.7;
+  const BACK_LEN = Math.PI * 2 - 1.4;
 
   if (hairStyle === "bowl") {
     headG.add(shell(0, CROWN));
     headG.add(shell(CROWN - 0.06, FRINGE_END - CROWN + 0.06, FRONT - FRINGE_ARC, FRINGE_ARC * 2));
     headG.add(shell(CROWN - 0.14, 1.72, BACK_PHI, BACK_LEN));
-    // sideburns hide the ears, in front of them
-    for (const s of [-1, 1]) {
-      const burn = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.27, 0.17), hairMat);
-      burn.position.set(0.278 * s, -0.1, 0.055);
-      headG.add(burn);
-    }
   } else if (hairStyle === "bob") {
     headG.add(shell(0, CROWN));
     headG.add(shell(CROWN - 0.06, FRINGE_END + 0.24 - CROWN, FRONT - FRINGE_ARC - 0.2, (FRINGE_ARC + 0.2) * 2));
-    headG.add(shell(CROWN - 0.14, 1.9, Math.PI / 2 - 0.55, Math.PI + 1.1, HS * 1.02));
+    headG.add(shell(CROWN - 0.14, 1.9, FRONT - 1.35, 2.7, HS * 1.02));
     for (const s of [-1, 1]) {
-      const lock = new THREE.Mesh(new THREE.CapsuleGeometry(0.05, 0.3, 4, 8), hairMat);
-      lock.position.set(0.275 * s, -0.2, 0.07);
+      const lock = new THREE.Mesh(new THREE.CapsuleGeometry(0.055, 0.3, 4, 8), hairMat);
+      lock.position.set(0.305 * s, -0.2, 0.07);
       headG.add(lock);
     }
   } else if (hairStyle === "afro") {
@@ -308,10 +315,14 @@ export function createMii(options = {}) {
     if (moving) {
       walkPhase += dt * 11;
       const s = Math.sin(walkPhase);
+      const swing = s * 0.42;
       armL.rotation.x = s * 0.5;
       armR.rotation.x = -s * 0.5;
-      legL.rotation.x = -s * 0.42;
-      legR.rotation.x = s * 0.42;
+      legL.rotation.x = -swing;
+      legR.rotation.x = swing;
+      // counter-rotate the shoes so the soles stay roughly flat
+      legL.userData.shoe.rotation.x = swing * 0.85;
+      legR.userData.shoe.rotation.x = -swing * 0.85;
       armL.rotation.z = REST_Z * -1;
       armR.rotation.z = REST_Z * 1;
       inner.position.y = Math.abs(Math.cos(walkPhase)) * 0.045;
@@ -324,6 +335,8 @@ export function createMii(options = {}) {
       armR.rotation.x += (0 - armR.rotation.x) * k;
       legL.rotation.x += (0 - legL.rotation.x) * k;
       legR.rotation.x += (0 - legR.rotation.x) * k;
+      legL.userData.shoe.rotation.x += (0 - legL.userData.shoe.rotation.x) * k;
+      legR.userData.shoe.rotation.x += (0 - legR.userData.shoe.rotation.x) * k;
       armL.rotation.z += (REST_Z * -1 - armL.rotation.z) * k;
       armR.rotation.z += (REST_Z * 1 - armR.rotation.z) * k;
       inner.position.y = Math.sin(t * 1.8) * 0.008;

@@ -286,5 +286,11 @@ function showFired(finished) {
 $("#again").addEventListener("click", () => location.reload());
 $("#restart").addEventListener("click", () => location.reload());
 
+// dev: ?at=x,z teleports the player (visual checks)
+if (DEV.has("at")) {
+  const [x, z] = DEV.get("at").split(",").map(Number);
+  if (Number.isFinite(x) && Number.isFinite(z)) world.teleport(x, z);
+}
+
 // dev: ?ui=chat drops straight into the computer UI
 if (DEV.get("ui") === "chat") enterComputer();
