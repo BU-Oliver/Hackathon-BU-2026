@@ -99,6 +99,7 @@ function banner(text, ms = 1600) {
   banner._t = setTimeout(() => dayBanner.classList.add("hidden"), ms);
 }
 function doFlash() {
+  if (new URLSearchParams(location.search).has("noflash")) return;
   flash.classList.remove("go");
   void flash.offsetWidth;
   flash.classList.add("go");
@@ -134,15 +135,23 @@ refreshHud();
 
 // Character creator runs before day 1: world stays frozen behind it,
 // then the chosen look is applied to the walker and the shift begins.
+// Dev flags (for visual checks): ?skipCustom=1 &phase=office &ui=chat
+const DEV = new URLSearchParams(location.search);
 world.setPaused(true);
-initCustomizer({
-  initial: DEFAULT_LOOK,
-  onConfirm: (look) => {
-    world.setPlayerOptions(look);
-    world.setPaused(false);
-    banner("Walk to the glowing door to start work");
-  },
-});
+if (DEV.has("skipCustom")) {
+  world.setPlayerOptions(DEFAULT_LOOK);
+  world.setPaused(false);
+  if (DEV.get("phase") === "office") world.setPhase("office");
+} else {
+  initCustomizer({
+    initial: DEFAULT_LOOK,
+    onConfirm: (look) => {
+      world.setPlayerOptions(look);
+      world.setPaused(false);
+      banner("Walk to the glowing door to start work");
+    },
+  });
+}
 
 /* ---------------------------------- shop ---------------------------------- */
 function renderShop() {
@@ -276,3 +285,6 @@ function showFired(finished) {
 }
 $("#again").addEventListener("click", () => location.reload());
 $("#restart").addEventListener("click", () => location.reload());
+
+// dev: ?ui=chat drops straight into the computer UI
+if (DEV.get("ui") === "chat") enterComputer();

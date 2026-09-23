@@ -33,7 +33,7 @@ const PANTS = [
   ["Khaki", 0x9a7f4e], ["Olive", 0x5a5e33],
 ];
 const HAIRCUTS = [
-  ["bowl", "Bowl"], ["bob", "Bob"], ["afro", "Afro"],
+  ["bowl", "Bowl"], ["spiky", "Spiky"], ["bob", "Bob"], ["afro", "Afro"],
   ["buzz", "Buzz"], ["ponytail", "Pony"], ["bald", "Bald"],
 ];
 const FACES = [["round", "Round"], ["slim", "Slim"], ["wide", "Wide"]];
@@ -54,13 +54,16 @@ export function initCustomizer({ initial = DEFAULT_LOOK, onConfirm }) {
   renderer.setPixelRatio(Math.min(devicePixelRatio || 1, 2));
   renderer.setSize(240, 280, false);
   const scene = new THREE.Scene();
-  scene.add(new THREE.HemisphereLight(0xfff6e3, 0x8a7f6f, 1.3));
-  const sun = new THREE.DirectionalLight(0xfff1d6, 1.2);
-  sun.position.set(2, 4, 3);
-  scene.add(sun);
-  const camera = new THREE.PerspectiveCamera(38, 240 / 280, 0.1, 50);
-  camera.position.set(0, 1.25, 3.9);
-  camera.lookAt(0, 1.05, 0);
+  scene.add(new THREE.HemisphereLight(0xfffaf0, 0x9a8f7a, 1.45));
+  const key = new THREE.DirectionalLight(0xfff3dc, 1.35);
+  key.position.set(2.2, 4, 4);
+  scene.add(key);
+  const rim = new THREE.DirectionalLight(0xdfefff, 0.5);
+  rim.position.set(-3, 2, -3);
+  scene.add(rim);
+  const camera = new THREE.PerspectiveCamera(34, 240 / 280, 0.1, 50);
+  camera.position.set(0, 1.15, 3.35);
+  camera.lookAt(0, 1.0, 0);
 
   let model = null;
   function disposeModel() {

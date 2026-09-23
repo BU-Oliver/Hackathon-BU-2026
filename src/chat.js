@@ -83,29 +83,29 @@ function spawn(n, good = null) {
     puffs.push({
       x: Math.random() * W,
       y: H * (0.55 + Math.random() * 0.45),
-      r: 24 + Math.random() * 70,
+      r: 20 + Math.random() * 54,
       vy: -(0.25 + Math.random() * 0.6),
       vx: (Math.random() - 0.5) * 0.3,
       life: 1,
-      decay: 0.0016 + Math.random() * 0.003,
+      decay: 0.0018 + Math.random() * 0.0032,
       tint: good === true ? "30,158,106" : good === false ? "190,120,100" : "150,140,120",
     });
   }
-  if (puffs.length > 220) puffs = puffs.slice(-220);
+  if (puffs.length > 90) puffs = puffs.slice(-90);
 }
 export function puffBurst(good) {
   spawn(good ? 26 : 18, good);
 }
 (function tick() {
   ctx.clearRect(0, 0, W, H);
-  if (puffs.length < 60 && Math.random() < 0.25) spawn(1);
+  if (puffs.length < 14 && Math.random() < 0.12) spawn(1);
   for (const p of puffs) {
     p.x += p.vx + Math.sin(p.y * 0.01) * 0.3;
     p.y += p.vy;
     p.life -= p.decay;
     p.r += 0.12;
     if (p.life <= 0 || p.y < -120) continue;
-    const a = Math.max(0, p.life) * 0.1;
+    const a = Math.max(0, p.life) * 0.04;
     const g = ctx.createRadialGradient(p.x, p.y, 0, p.x, p.y, p.r);
     g.addColorStop(0, `rgba(${p.tint},${a})`);
     g.addColorStop(1, `rgba(${p.tint},0)`);
@@ -117,7 +117,7 @@ export function puffBurst(good) {
   puffs = puffs.filter((p) => p.life > 0 && p.y > -130);
   requestAnimationFrame(tick);
 })();
-spawn(50);
+spawn(12);
 
 /* live fake telemetry */
 const pueEl = document.querySelector("#m-pue");
