@@ -10,3 +10,4 @@ e.g "We should use less renewable energy! It's slow and not enough. We should se
 
 these choices given affect the data center and the world arround you. Compares your choices to the real world.
 E.g Enviornment degrades / repairs, data center goes on fire, water drains all around etc etc
+    

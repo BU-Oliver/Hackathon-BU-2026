@@ -1,65 +1,117 @@
 import "./style.css";
 import { createWorld } from "./world.js";
 import { initCustomizer, DEFAULT_LOOK } from "./customizer.js";
+import { runDecisions } from "./advisor.js";
+import { START_STATE } from "./policy.js";
 import { startDay, getTrust, puffBurst } from "./chat.js";
 
-/* ------------------------------ question pool ----------------------------- */
+/* ------------------------------ question pool -----------------------------
+ * Answers are real Irish figures from the CSO / EirGrid / SEAI series in
+ * data/BCP Data.xlsx. See data/EXTRACTED-STATS.md for the full tables. */
 const POOL = [
   {
-    question: "be honest… how much electricity running datacenters here is actually renewable?",
-    prefix: "The electricity running this datacenter is", suffix: "renewable.",
-    trueValue: 68, tolerance: 6,
-    vindicated: ["ok ok… receipts checked. ✅ you actually know the grid mix.", "fine. the wind farm telemetry backs you up."],
-    liar: ["LIAR. 🤨 the meter says {true}% — not {guess}%. who sent you, gas lobby?", "LIAR!! I literally watch the turbines spin. it's {true}%, not {guess}%."],
+    question: "Ireland's grid is getting cleaner fast. What is its carbon intensity now?",
+    prefix: "The Irish grid runs at", suffix: "gCO2 per kWh.",
+    trueValue: 224, tolerance: 12,
+    vindicated: [
+      "EirGrid's number. It was 896 in 1990 — we have taken 75% off it.",
+      "Correct. Everyone assumes it's dirtier than it is.",
+    ],
+    liar: [
+      "LIAR. it's {true}g, not {guess}g. that's EirGrid's 2024 figure.",
+      "LIAR!! {true}g. Check the KPI sheet like everyone else.",
+    ],
   },
   {
-    question: "quick one — what % of site power gets wasted just on cooling?",
-    prefix: "Cooling wastes", suffix: "of site power.",
-    trueValue: 32, tolerance: 6,
-    vindicated: ["yep. chillers are thirsty beasts. ❄️", "correct — that's why the aisles feel like a fridge."],
-    liar: ["LIAR. it's {true}% on cooling, not {guess}%. touch a hot aisle and try again.", "LIAR!! the BMS logs say {true}%. stop cooling the truth."],
+    question: "what share of ALL of Ireland's electricity did data centres eat last year?",
+    prefix: "Data centres took", suffix: "of Ireland's electricity.",
+    trueValue: 22, tolerance: 3,
+    vindicated: [
+      "22%. CSO put us at 6,973 GWh out of 31,903.",
+      "Yeah. A fifth of the country's grid.",
+    ],
+    liar: [
+      "LIAR. it's {true}%, not {guess}%. CSO, last year.",
+      "LIAR!! {true}% of national electricity. Look it up.",
+    ],
   },
   {
-    question: "and water? what % of our cooling water is recycled?",
-    prefix: "We recycle", suffix: "of cooling water.",
-    trueValue: 54, tolerance: 7,
-    vindicated: ["damn, you read the sustainability report. 💧", "right — closed-loop for the win."],
-    liar: ["LIAR. recycling is {true}%, not {guess}%. the steam outside is literally recycled.", "LIAR!! {true}% recycled. the cooling towers saw what you said."],
+    question: "ten years ago we were tiny. what did the whole sector pull in 2015?",
+    prefix: "In 2015 the sector used", suffix: "GWh.",
+    trueValue: 1240, tolerance: 180,
+    vindicated: [
+      "1,240 GWh. 5% of the grid. Look how far we have come.",
+      "Correct — and it was not always this noisy.",
+    ],
+    liar: [
+      "LIAR. 2015 was {true} GWh, not {guess}. CSO series.",
+      "LIAR!! {true} GWh. That's the baseline.",
+    ],
   },
   {
-    question: "peak demand… what % of the campus load is just AI training racks?",
+    question: "SEAI has a forecast. what does it put the sector at in 2030?",
+    prefix: "By 2030 SEAI forecasts", suffix: "GWh.",
+    trueValue: 12832, tolerance: 1400,
+    vindicated: [
+      "12,832. Nearly double 2024. The connection queue is the real problem.",
+      "Correct. That is why grid capacity matters.",
+    ],
+    liar: [
+      "LIAR. forecast is {true} GWh, not {guess}. Read the SEAI sheet.",
+      "LIAR!! {true} GWh by 2030. It's right there.",
+    ],
+  },
+  {
+    question: "grid intensity keeps falling. how far below 1990 are we now?",
+    prefix: "We are down", suffix: "% on 1990's intensity.",
+    trueValue: 75, tolerance: 5,
+    vindicated: [
+      "75%. 896 down to 224. That's the real story.",
+      "Correct — the grid did the heavy lifting.",
+    ],
+    liar: [
+      "LIAR. it's {true}%, not {guess}%. 896 to 224.",
+      "LIAR!! {true}% off 1990. Do the subtraction.",
+    ],
+  },
+  {
+    question: "and the growth rate. how much has sector demand multiplied since 2015?",
+    prefix: "Demand is up", suffix: "x on 2015.",
+    trueValue: 6, tolerance: 1,
+    vindicated: [
+      "About 6x. 1,240 to 7,663. National demand barely moved.",
+      "Correct. Six times the load, same grid.",
+    ],
+    liar: [
+      "LIAR. it's {true}x, not {guess}x. Do the division.",
+      "LIAR!! {true}x since 2015.",
+    ],
+  },
+  {
+    question: "newer survey, newer numbers. what share is the sector heading towards?",
+    prefix: "We are heading for", suffix: "of national electricity.",
+    trueValue: 23, tolerance: 3,
+    vindicated: [
+      "23% last year. That's the sector, not just us.",
+      "Right. We are past a fifth of the grid.",
+    ],
+    liar: [
+      "LIAR. it's {true}%, not {guess}%. CSO 2025.",
+      "LIAR!! {true}%. Where do you think that came from?",
+    ],
+  },
+  {
+    question: "AI training racks — what share of campus load is just the GPU hall?",
     prefix: "AI training eats", suffix: "of campus load.",
     trueValue: 41, tolerance: 6,
-    vindicated: ["yeah… row D hums day and night. you got it.", "bingo. GPUs are hungry. 🤖"],
-    liar: ["LIAR. AI racks pull {true}%, not {guess}%. listen to them hum.", "LIAR!! {true}% — go stand next to row D and feel it."],
-  },
-  {
-    question: "last one. what % of our waste heat gets reused by the district?",
-    prefix: "We reuse", suffix: "of waste heat.",
-    trueValue: 23, tolerance: 6,
-    vindicated: ["nailed it. the neighbourhood showers thank us. 🚿", "correct — heat network pipes don't lie."],
-    liar: ["LIAR. heat reuse is {true}%, not {guess}%. the pipes are warm, your take is cold.", "LIAR!! it's {true}%. ask the houses across the road."],
-  },
-  {
-    question: "on a windy day, what % of grid power is just wind?",
-    prefix: "Wind covers", suffix: "of grid power.",
-    trueValue: 47, tolerance: 7,
-    vindicated: ["yep — when it blows, it blows. 🌬️", "correct. check the turbine app sometime."],
-    liar: ["LIAR. wind is {true}%, not {guess}%. look out the window.", "LIAR!! {true}% — the blades don't lie."],
-  },
-  {
-    question: "what % of retired servers get refurbished instead of scrapped?",
-    prefix: "We refurbish", suffix: "of retired servers.",
-    trueValue: 61, tolerance: 7,
-    vindicated: ["correct — the refurb bench is always busy. 🔧", "yep. waste not."],
-    liar: ["LIAR. refurb rate is {true}%, not {guess}%. visit the bench.", "LIAR!! {true}% — the screws remember."],
-  },
-  {
-    question: "at night, what % of load is covered by battery storage?",
-    prefix: "Batteries cover", suffix: "of night load.",
-    trueValue: 18, tolerance: 6,
-    vindicated: ["right — batteries only stretch so far. 🔋", "correct. the container hums till ~3am."],
-    liar: ["LIAR. batteries cover {true}%, not {guess}%.", "LIAR!! {true}% — go hug the battery container."],
+    vindicated: [
+      "41%. Row D hums day and night. You got it.",
+      "Correct — the old models assumed servers, not GPUs.",
+    ],
+    liar: [
+      "LIAR. it's {true}%, not {guess}%. Walk to row D and listen.",
+      "LIAR!! {true}%. Go feel the hot aisle.",
+    ],
   },
 ];
 
@@ -75,6 +127,7 @@ let warnings = 0;
 let totalCorrect = 0, totalAsked = 0;
 let shop = { tips: 0, calibration: false, secondChance: false }; // for the upcoming day
 let inComputer = false;
+let worldState = { ...START_STATE };
 
 const $ = (s) => document.querySelector(s);
 const sceneEl = $("#scene"), hud3d = $("#hud3d"), promptEl = $("#prompt"),
@@ -131,6 +184,7 @@ const world = createWorld(sceneEl, {
 });
 interactBtn.addEventListener("click", () => world.tryInteract());
 world.setDayTint(1);
+world.setWorldState(worldState);
 refreshHud();
 
 // Character creator runs before day 1: world stays frozen behind it,
@@ -216,19 +270,35 @@ async function enterComputer() {
 async function exitComputer(res) {
   totalCorrect += res.correct;
   totalAsked += res.total;
-  doFlash();
-  await wait(350);
+
+  // policy phase — PRISM messages you, you decide, the world reacts.
+  // Put the campus back on screen BEFORE the policy phase so the player
+  // watches the world react to each decision rather than reading about it.
   computer.classList.add("hidden");
   world.setVisible(true);
   world.setPaused(false);
-  hud3d.classList.remove("hidden");
   inComputer = false;
-  showPayday(res);
+  promptEl.classList.add("hidden");
+
+  const decisions = await runDecisions({
+    state: worldState,
+    dayNo,
+    onWorldChange: (s) => {
+      worldState = s;
+      world.setWorldState(s);
+    },
+  });
+
+  hud3d.classList.remove("hidden");
+  showPayday(res, decisions);
 }
 
 /* --------------------------------- payday --------------------------------- */
-function showPayday(res) {
-  const earned = BASE_PAY + res.correct * PER_CORRECT;
+const DECISION_BONUS = 18; // per full "defensible" point
+
+function showPayday(res, decisions) {
+  const decBonus = (decisions?.score ?? 0) * DECISION_BONUS;
+  const earned = BASE_PAY + res.correct * PER_CORRECT + decBonus;
   const net = earned - DEDUCTION;
   balance += net;
   const bad = res.correct <= 1;
@@ -238,15 +308,26 @@ function showPayday(res) {
 
   const fired = warnings >= 2 || balance < -20;
   const lastDay = dayNo >= DAYS.length;
+  const ws = worldState;
+  const collab = () => {
+    const q = (v) => `<div class="prow"><span>${v}</span><b>${ws[v]}</b></div>`;
+    return q("environment") + q("water") + q("reliability") + q("load");
+  };
 
   $("#pay-title").textContent = `DAY ${dayNo} PAYCHECK`;
   $("#pay-rows").innerHTML =
     `<div class="prow"><span>Base pay</span><b>+£${BASE_PAY}</b></div>` +
     `<div class="prow"><span>Correct answers (${res.correct}/${res.total})</span><b>+£${res.correct * PER_CORRECT}</b></div>` +
+    `<div class="prow"><span>Operational decisions (${decisions?.score ?? 0}/${decisions?.max ?? 0})</span><b>+£${decBonus}</b></div>` +
     `<div class="prow"><span>Rent & noodles</span><b>−£${DEDUCTION}</b></div>` +
     `<div class="prow total"><span>Net</span><b>${net >= 0 ? "+" : ""}£${net}</b></div>` +
     `<div class="prow"><span>Balance</span><b>£${balance}</b></div>` +
     `<div class="prow"><span>Trust</span><b>${getTrust()}</b></div>` +
+    `<div class="prow-sub">THE CAMPUS &amp; THE LAND</div>` +
+    collab() +
+    (decisions?.notes?.length
+      ? `<p class="warnline">${decisions.notes.join(" ")}</p>`
+      : `<p class="niceline">The site and the valley around it are holding up. ✅</p>`) +
     (bad ? `<p class="warnline">⚠ Bad shift (${res.correct}/${res.total} right). Warning ${warnings}/2 — two strikes and you're fired.</p>`
          : `<p class="niceline">Solid shift. Mara vouched for you. ✅</p>`);
   const nextBtn = $("#next-day");
@@ -294,3 +375,28 @@ if (DEV.has("at")) {
 
 // dev: ?ui=chat drops straight into the computer UI
 if (DEV.get("ui") === "chat") enterComputer();
+// dev: ?ui=decisions jumps straight to the policy phase (world stays visible)
+if (DEV.get("ui") === "decisions") {
+  world.setVisible(true);
+  world.setPaused(false);
+  hud3d.classList.add("hidden");
+  runDecisions({
+    state: worldState,
+    dayNo,
+    onWorldChange: (s) => {
+      worldState = s;
+      world.setWorldState(s);
+    },
+  });
+}
+// dev: ?world=env,water,reliability,load forces a world state
+if (DEV.has("world")) {
+  const [e, w, r, l] = DEV.get("world").split(",").map(Number);
+  worldState = {
+    environment: e ?? worldState.environment,
+    water: w ?? worldState.water,
+    reliability: r ?? worldState.reliability,
+    load: l ?? worldState.load,
+  };
+  world.setWorldState(worldState);
+}

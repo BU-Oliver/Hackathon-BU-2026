@@ -151,6 +151,7 @@ export function createWorld(container, opts = {}) {
 
   const turbineHubs = [];
   const clouds = [];
+  const waterPlanes = []; // lake + village pond, shrunk by the world state
   let seed = 7;
   const rnd = () => { seed = (seed * 16807) % 2147483647; return seed / 2147483647; };
 
@@ -554,7 +555,8 @@ export function createWorld(container, opts = {}) {
   street.add(oldTree);
   bench(-36, 18); bench(-30, 18);
   flat(8.0, 5.8, lam(0x8a7a5a), -19.5, 0.008, 20.5); // muddy rim
-  flat(6.6, 4.4, lam(0x6fb3c8), -19.5, 0.02, 20.5); // pond
+  const pondWater = flat(6.6, 4.4, lam(0x6fb3c8), -19.5, 0.02, 20.5); // pond
+  waterPlanes.push(pondWater);
   for (let i = 0; i < 6; i++) {
     const rx = -22.5 + i * 1.2;
     const rz = 18.4 + Math.sin(i * 1.7) * 0.4;
@@ -569,7 +571,8 @@ export function createWorld(container, opts = {}) {
 
   /* ---- lake (far east, clear of the car park) with a proper jetty ---- */
   flat(23, 17, lam(0x8a7a5a), 44, 0.005, 2);
-  flat(19, 13, lam(0x6fb3c8), 44, 0.04, 2);
+  const lakeWater = flat(19, 13, lam(0x6fb3c8), 44, 0.04, 2);
+  waterPlanes.push(lakeWater);
   // jetty: deck resting on posts that actually stand in the water
   const jettyX = 34.5;
   box(5.0, 0.14, 1.5, lam(0x7a5a3a), jettyX, 0.42, 2, street);
@@ -708,6 +711,59 @@ export function createWorld(container, opts = {}) {
       street.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(curve.getPoints(12)), lineMat));
     }
   }
+
+  /* ---- smoke plume off Hall A, shown when reliability collapses ---- */
+  const smokeMat = new THREE.MeshLambertMaterial({
+    color: 0x4a4a48, transparent: true, opacity: 0,
+  });
+  const smokeGroup = new THREE.Group();
+  for (let i = 0; i < 8; i++) {
+    const puff = new THREE.Mesh(new THREE.SphereGeometry(0.8 + i * 0.22, 8, 6), smokeMat);
+    puff.position.set(-7 + i * 0.7, 9.2 + i * 1.25, -13);
+    smokeGroup.add(puff);
+  }
+  smokeGroup.visible = false;
+  street.add(smokeGroup);
+
+  /* ---- references that the world state drives ---- */
+  /* ---- community opposition: appears on the approach road and at the pub
+   * when acceptance collapses ---- */
+  const protestMat = lam(0xf4f0e6);
+  const protestGroup = new THREE.Group();
+  function sign(x, z, text) {
+    const g = new THREE.Group();
+    g.position.set(x, 0, z);
+    g.rotation.y = 0.35;
+    box(1.5, 0.85, 0.06, protestMat, 0, 1.3, 0, g);
+    box(0.08, 0.9, 0.08, lam(0x7a5a3a), 0, 0.45, 0, g);
+    const t = new THREE.Mesh(
+      new THREE.PlaneGeometry(1.34, 0.7),
+      new THREE.MeshBasicMaterial({
+        map: textTexture(text, { w: 384, h: 200, bg: "#f4f0e6", fg: "#a8321f", font: 74 }),
+      })
+    );
+    t.position.set(0, 1.3, 0.04);
+    g.add(t);
+    protestGroup.add(g);
+  }
+  sign(-13, 20, "NO MORE");
+  sign(-15.5, 20.6, "TALK TO US");
+  sign(9, 19, "GO HOME");
+  protestGroup.visible = false;
+  street.add(protestGroup);
+  // boarded-up pub windows when the village has given up on the campus
+  const boards = new THREE.Group();
+  for (const [bx, bz, ry] of [[-35.9, 3.6, 0], [-30.6, 16.4, Math.PI]]) {
+    const g = new THREE.Group();
+    g.position.set(bx, 1.5, bz);
+    g.rotation.y = ry;
+    for (let i = 0; i < 3; i++) box(0.95, 0.16, 0.05, lam(0x8a6f4e), 0, -0.3 + i * 0.3, 2.1, g);
+    boards.add(g);
+  }
+  boards.visible = false;
+  street.add(boards);
+
+  const stateRefs = { leafMats, grassMat: groundMat, waterPlanes, smokeGroup, turbineHubs, protestGroup, boards };
 
   /* ---- drifting clouds ---- */
   const cloudMat = basic(0xf6f4ec);
@@ -1061,6 +1117,58 @@ export function createWorld(container, opts = {}) {
   box(0.18, 0.06, 0.04, lam(0x2f9e6a), -8.5, 1.7, -10.43, office);
   box(0.06, 0.18, 0.04, lam(0x2f9e6a), -8.5, 1.7, -10.43, office);
 
+  /* ================================ world state ==============================
+   * Decisions taken in the policy phase push these numbers, and the campus
+   * physically responds: grass and foliage dry out, the lake shrinks, the sky
+   * hazes over, smoke appears, and the turbines spin harder under load. */
+
+  const HEALTHY_GRASS = new THREE.Color(0x86a862);
+  const DEAD_GRASS = new THREE.Color(0x9a8a54);
+  const HEALTHY_LEAF = [0x4f7a3c, 0x5d8a48, 0x446b34].map((h) => new THREE.Color(h));
+  const DEAD_LEAF = new THREE.Color(0x7d6a3c);
+  const CLEAR_SKY = new THREE.Color(0x9fc4de);
+  const HAZE_SKY = new THREE.Color(0xc9b79a);
+  const tmpColour = new THREE.Color();
+
+  function setWorldState(s) {
+    if (!s) return;
+    const env = THREE.MathUtils.clamp(s.environment ?? 68, 0, 100) / 100;
+
+    // grass + foliage dry out as the environment drops
+    tmpColour.copy(DEAD_GRASS).lerp(HEALTHY_GRASS, env);
+    stateRefs.grassMat.color.copy(tmpColour);
+    for (const m of stateRefs.leafMats) m.color.copy(DEAD_LEAF).lerp(HEALTHY_LEAF[env > 0.5 ? 0 : 1], 0.25 + env * 0.75);
+
+    // the sky follows the environment: clear blue -> smoggy tan.
+    // NB: Color.lerp takes (color, alpha) — exactly two args. Passing three
+    // made the fog colour NaN and blacked out the whole render.
+    paintSky(
+      CLEAR_SKY.clone().lerp(HAZE_SKY, 1 - env).getHex(),
+      new THREE.Color(0xe8ecdf).lerp(new THREE.Color(0xd6c3a4), 1 - env).getHex()
+    );
+    scene.fog.color.lerp(new THREE.Color(0xd8c8ad), 1 - env);
+
+    // the lake and pond shrink as water is drawn down
+    const w = 0.35 + (THREE.MathUtils.clamp(s.water ?? 100, 0, 100) / 100) * 0.65;
+    for (const p of stateRefs.waterPlanes) p.scale.set(w, w, 1);
+
+    // smoke when the facility is in trouble
+    const bad = 1 - THREE.MathUtils.clamp(s.reliability ?? 86, 0, 100) / 100;
+    const smoke = THREE.MathUtils.clamp((bad - 0.35) / 0.5, 0, 1);
+    stateRefs.smokeGroup.visible = smoke > 0.01;
+    smokeMat.opacity = smoke * 0.55;
+    smokeGroup.scale.setScalar(0.7 + smoke * 0.6);
+
+    // grid load drives the turbines
+    const load = THREE.MathUtils.clamp(s.load ?? 42, 0, 100) / 100;
+    stateRefs.turbineSpeed = 0.5 + load * 2.6;
+
+    // the village turns: protest signs, then boarded-up buildings
+    const acc = THREE.MathUtils.clamp(s.acceptance ?? 52, 0, 100) / 100;
+    stateRefs.protestGroup.visible = acc < 0.42;
+    stateRefs.boards.visible = acc < 0.24;
+  }
+
   /* --------------------------- markers + player -------------------------- */
   const markerMat = basic(0xd97b2b);
   function marker() {
@@ -1191,7 +1299,7 @@ export function createWorld(container, opts = {}) {
       led.material.color.setHex(on ? 0x7cf2b0 : 0x2c3831);
     }
     if (myScreen) myScreen.material.color.setHSL(0.42, 0.45, 0.62 + Math.sin(t * 5) * 0.05);
-    for (const h of turbineHubs) h.rotation.z += dt * 1.5;
+    for (const h of turbineHubs) h.rotation.z += dt * (stateRefs.turbineSpeed ?? 1.5);
     for (const c of clouds) {
       c.position.x += dt * 0.5;
       if (c.position.x > 95) c.position.x = -95;
@@ -1229,6 +1337,7 @@ export function createWorld(container, opts = {}) {
   return {
     setPhase,
     setDayTint,
+    setWorldState,
     tryInteract,
     setPlayerOptions,
     teleport: (x, z) => player.position.set(x, 0, z),
