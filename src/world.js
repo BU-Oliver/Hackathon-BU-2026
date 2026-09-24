@@ -1,5 +1,5 @@
 import * as THREE from "three";
-import { createMii } from "./mii.js";
+import { createMii, DEFAULT_LOOK } from "./mii.js";
 
 /* The world outside the computer: an Irish datacenter campus with a village,
  * lake and farmland around it, plus the office interior. One scene, two zones
@@ -413,10 +413,19 @@ export function createWorld(container, opts = {}) {
   caster(box(2.9, 0.25, 2.9, lam(0x8e9490), 13.5, 2.9, 21, street));
   box(2.3, 0.9, 0.12, lam(0x2b3d44), 13.5, 1.8, 22.32, street);
   box(2.3, 0.8, 0.12, lam(0x2b3d44), 13.5, 1.8, 19.68, street);
-  const barrier = caster(box(4.2, 0.16, 0.16, lam(0xc23b2e), 20.5, 1.05, 21.5, street));
-  for (let i = 0; i < 5; i++) box(0.4, 0.18, 0.18, lam(0xf2f0e8), 18.9 + i * 0.85, 1.05, 21.5, street);
-  barrier.rotation.z = 0.08;
+  // boom barrier. The beam and its white stripes live in one group so they
+  // tilt together — building the stripes in world space left them floating
+  // above the raised end of the beam.
+  const boom = new THREE.Group();
+  boom.position.set(20.5, 1.05, 21.5);
+  boom.rotation.z = 0.08;
+  street.add(boom);
+  caster(box(4.2, 0.16, 0.16, lam(0xc23b2e), 0, 0, 0, boom));
+  for (let i = 0; i < 5; i++) {
+    box(0.42, 0.18, 0.18, lam(0xf2f0e8), -1.6 + i * 0.85, 0, 0, boom);
+  }
   caster(cyl(0.11, 0.13, 1.1, lam(0x6e7375), 18.4, 0.55, 21.5, street, 8));
+  box(0.3, 0.24, 0.3, lam(0xc23b2e), 18.4, 1.12, 21.5, street);
 
   // low perimeter fence (gap at the spur entrance)
   const fenceMat = lam(0x777d7f);
@@ -536,14 +545,21 @@ export function createWorld(container, opts = {}) {
     box(0.5, 0.7, 0.12, lam(0x9a968c), gx, 0.35, gz, street);
   }
 
-  // village green: old tree + benches + pond
+  // village green: old tree + benches + pond.
+  // Parked between the cottages (which end at x≈-24.5) and the road
+  // (which starts at z≈24.25) so no wall corner or kerb ends up in the water.
   cyl(0.3, 0.4, 2.2, lam(0x6a4a2e), -33, 1.1, 18, street, 8);
   const oldTree = new THREE.Mesh(new THREE.IcosahedronGeometry(2.2, 0), lam(0x4d7a3f));
   oldTree.position.set(-33, 3.4, 18);
   street.add(oldTree);
   bench(-36, 18); bench(-30, 18);
-  flat(7, 5, lam(0x6fb3c8), -22, 0.02, 19); // pond
-  flat(8.4, 6.4, lam(0x8a7a5a), -22, 0.008, 19); // muddy rim under it
+  flat(8.0, 5.8, lam(0x8a7a5a), -19.5, 0.008, 20.5); // muddy rim
+  flat(6.6, 4.4, lam(0x6fb3c8), -19.5, 0.02, 20.5); // pond
+  for (let i = 0; i < 6; i++) {
+    const rx = -22.5 + i * 1.2;
+    const rz = 18.4 + Math.sin(i * 1.7) * 0.4;
+    cyl(0.05, 0.06, 0.9 + (i % 3) * 0.3, lam(0x5d8a48), rx, 0.5, rz, street, 5);
+  }
 
   // stone walls edging the lane
   const stoneMat = lam(0x9a968c);
@@ -1059,17 +1075,12 @@ export function createWorld(container, opts = {}) {
   deskMarker.position.set(MY_DESK.x, 2.9, MY_DESK.z);
   deskMarker.visible = false;
 
-  let player = createMii({ skin: 0x7b4c2d, shirt: 0xd6503c, pants: 0x333945, hair: 0x4a2c14, hairStyle: "bowl" });
+  let player = createMii({ ...DEFAULT_LOOK });
   scene.add(player);
 
   function setPlayerOptions(opts) {
-    const pos = player.position.clone();
-    const rot = player.rotation.y;
-    scene.remove(player);
-    player = createMii(opts);
-    player.position.copy(pos);
-    player.rotation.y = rot;
-    scene.add(player);
+    // rebuild in place — same group, same animation state, no disposal dance
+    player.userData.rebuild(opts);
   }
 
   const camera = new THREE.PerspectiveCamera(50, innerWidth / innerHeight, 0.1, 260);

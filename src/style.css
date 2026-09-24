@@ -377,11 +377,11 @@ input[type="range"] { flex: 1; accent-color: var(--accent); height: 28px; cursor
 .overlay .card.wide { width: min(720px, 96vw); }
 .cust-layout { display: flex; gap: 16px; margin-top: 10px; }
 .cust-preview {
-  flex: 0 0 240px;
+  flex: 0 0 300px;
   display: flex; flex-direction: column; align-items: center; gap: 8px;
 }
 #cust-canvas {
-  width: 240px; height: 280px;
+  width: 300px; height: 360px;
   border: 1px solid var(--line);
   border-radius: 16px;
   background: radial-gradient(200px 200px at 50% 30%, #fffdf4 0%, var(--cream) 70%, var(--cream-2) 100%);
